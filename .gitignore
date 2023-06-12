@@ -1,0 +1,4 @@
+test/private.pem
+test/public.pem
+test/katools/ka_public.pem
+test/katools/ka_private.pem

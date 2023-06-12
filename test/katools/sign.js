@@ -1,0 +1,12 @@
+const crypto = require("crypto");
+const fs = require("fs");
+const kapriv = fs.readFileSync(__dirname + "/ka_private.pem");
+let to_sign = fs.readFileSync(__dirname + "/public.pem");
+to_sign = to_sign.toString();
+to_sign = to_sign.split(":chainOfTrust:");
+let chunk_to_sign = to_sign[to_sign.length - 1];
+let signature = crypto.privateEncrypt(kapriv, crypto.createHash("sha256").update(Buffer.from(chunk_to_sign)).digest("base64")).toString("base64");
+to_sign.push(signature);
+to_sign = to_sign.join(":chainOfTrust:");
+fs.writeFileSync(__dirname + "/public.pem", to_sign);
+console.log("Public key successfully signed!");
