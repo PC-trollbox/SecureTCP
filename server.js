@@ -11,52 +11,47 @@ module.exports = function (secopts) {
 		let buf = Buffer.from("");
 		socket.on("data", function (data) {
 			buf = Buffer.concat([buf, data]);
-			if (buf[buf.byteLength - 1] == 0) {
-				buf = buf.slice(0, buf.byteLength - 1);
+			if (buf.toString().includes("\0")) {
+				let buf2 = buf.toString().split("\0").map(a => Buffer.from(a));
+				while (Buffer.compare(Buffer.from(""), buf2[buf2.length - 1]) == 0) buf2.pop();
 
-				buf.socket = socket;
-				ee.emit("rec-clear-data", buf);
+				for (let buf of buf2) {
+					socketEE.emit("rec-clear-data", buf);
 
-				if (!remotePublicKey.length) {
-					remotePublicKey = buf;
-					socket.socketEE = socketEE;
-					socket.keyExchange = {
-						remote: {
-							publicKey: remotePublicKey.toString()
-						},
-						local: {
-							publicKey: secopts.publicKey,
-							privateKey: secopts.privateKey
+					if (!remotePublicKey.length) {
+						remotePublicKey = buf;
+						socket.socketEE = socketEE;
+						socket.keyExchange = {
+							remote: {
+								publicKey: remotePublicKey.toString()
+							},
+							local: {
+								publicKey: secopts.publicKey,
+								privateKey: secopts.privateKey
+							}
+						};
+						ee.emit("connect", socket);
+					} else {
+						try {
+							buf = crypto.privateDecrypt(secopts.privateKey, Buffer.from(buf.toString(), "base64"));
+						} catch {
+							return socket.resetAndDestroy();
 						}
-					};
-					ee.emit("connect", socket);
-				} else {
-					try {
-						buf = buf.toString();
-						buf = JSON.parse(buf);
-						buf = buf.map(a => crypto.privateDecrypt(secopts.privateKey, Buffer.from(a, "base64")).toString("latin1"));
-						buf = buf.join("");
-						buf = Buffer.from(buf);
-					} catch {
-						return socket.resetAndDestroy();
+						socketEE.emit("rec-data", buf);
 					}
-					buf.socket = socket;
-					ee.emit("rec-data", buf);
 				}
-
 				buf = Buffer.from("");
 			}
 		});
 		socketEE.on("snd-data", function (buf) {
 			buf = buf.toString();
-			buf = buf.match(/.{1,63}/g);
+			buf = buf.match(/[\w\W]{1,63}/g);
 			try {
-				buf = buf.map(a => crypto.publicEncrypt(remotePublicKey.toString().split(":chainOfTrust:")[0], Buffer.from(a, "latin1")).toString("base64"));
+				buf = buf.map(a => crypto.publicEncrypt(remotePublicKey.toString(), Buffer.from(a, "latin1")).toString("base64"));
 			} catch {
 				return socket.resetAndDestroy();
 			}
-			buf = JSON.stringify(buf);
-			socket.write(buf + "\0");
+			for (let bc of buf) socket.write(bc + "\0");
 		});
 	});
     server.events = ee;
